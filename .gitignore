@@ -1,0 +1,24 @@
+# Cloudflare tunnel credentials — NEVER commit these
+cloudflared/credentials.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Node
+frontend/node_modules/
+frontend/.next/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

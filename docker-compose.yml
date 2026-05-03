@@ -1,0 +1,192 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: llm-lab-ollama
+    restart: unless-stopped
+    volumes:
+    - ollama_models:/root/.ollama
+    environment:
+    - OLLAMA_NUM_PARALLEL=1
+    - OLLAMA_MAX_LOADED_MODELS=1
+    - OLLAMA_KEEP_ALIVE=5m
+    - OLLAMA_NUM_THREAD=4
+    expose:
+    - '11434'
+    networks:
+    - llm-lab-net
+    mem_limit: 1600m
+    mem_reservation: 1300m
+    cpus: '3.5'
+  model-puller:
+    image: ollama/ollama:latest
+    container_name: llm-lab-model-puller
+    restart: 'no'
+    volumes:
+    - ollama_models:/root/.ollama
+    depends_on:
+      ollama:
+        condition: service_started
+    environment:
+    - OLLAMA_HOST=http://ollama:11434
+    command: "sh -c \"\n  echo 'Checking if llama3.2:1b is already downloaded...'\
+      \ &&\n  if ollama list 2>/dev/null | grep -q 'llama3.2:1b'; then\n    echo 'Model\
+      \ already present. Skipping download.';\n  else\n    echo 'Pulling llama3.2:1b\
+      \ (~1.3GB, please wait 3-6 min on first run)...' &&\n    ollama pull llama3.2:1b\
+      \ &&\n    echo 'Model pull complete!';\n  fi\n\"\n"
+    networks:
+    - llm-lab-net
+    mem_limit: 512m
+  postgres:
+    image: postgres:16-alpine
+    container_name: llm-lab-postgres
+    restart: unless-stopped
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      POSTGRES_DB: ctf_lab
+      POSTGRES_USER: ctf_user
+      POSTGRES_PASSWORD: ctf_local_pass_2024
+      PGDATA: /var/lib/postgresql/data/pgdata
+    expose:
+    - '5432'
+    ports:
+    - 127.0.0.1:5432:5432
+    networks:
+    - llm-lab-net
+    mem_limit: 200m
+    mem_reservation: 100m
+    cpus: '0.2'
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U ctf_user -d ctf_lab
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: llm-lab-backend:local
+    container_name: llm-lab-backend
+    restart: unless-stopped
+    volumes:
+    - ./backend/levels.json:/app/config/levels.json:ro
+    - ./backend/eval_service.py:/app/eval_service.py:ro
+    environment:
+      DATABASE_URL: postgresql://ctf_user:ctf_local_pass_2024@postgres:5432/ctf_lab
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: llama3.2:1b
+      CTF_LEVELS_PATH: /app/config/levels.json
+      CORS_ORIGINS: '*'
+      SECRET_KEY: local-dev-secret-change-for-lan-access
+      LLM_TIMEOUT_SECS: 180
+      LLM_MAX_TOKENS: 350
+      LLM_TEMPERATURE: 0.7
+      RATE_LIMIT_ATTEMPTS: 50
+      RELOAD: 'true'
+    expose:
+    - '8000'
+    ports:
+    - 127.0.0.1:8000:8000
+    networks:
+    - llm-lab-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    mem_limit: 400m
+    mem_reservation: 200m
+    cpus: '0.5'
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -sf
+      - http://localhost:8000/health
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    image: llm-lab-frontend:local
+    container_name: llm-lab-frontend
+    restart: unless-stopped
+    volumes:
+    - ./frontend/src:/app/src:ro
+    - ./frontend/public:/app/public:ro
+    environment:
+      NEXT_PUBLIC_BACKEND_URL: ''
+      NODE_ENV: development
+    expose:
+    - '3000'
+    networks:
+    - llm-lab-net
+    depends_on:
+    - backend
+    mem_limit: 400m
+    mem_reservation: 250m
+    cpus: '0.4'
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -sf
+      - http://localhost:3000
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 300s
+  nginx:
+    image: nginx:alpine
+    container_name: llm-lab-nginx
+    restart: unless-stopped
+    volumes:
+    - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+    - 0.0.0.0:8090:80
+    networks:
+    - llm-lab-net
+    depends_on:
+    - frontend
+    - backend
+    mem_limit: 64m
+    cpus: '0.1'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -qO-
+      - http://localhost/health
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: llm-lab-cloudflared
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+    - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+    - ./cloudflared/credentials.json:/etc/cloudflared/credentials.json:ro
+    networks:
+    - llm-lab-net
+    depends_on:
+    - nginx
+    mem_limit: 64m
+    cpus: '0.1'
+volumes:
+  ollama_models: null
+  postgres_data: null
+networks:
+  llm-lab-net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.20.0.0/24

@@ -1,0 +1,30 @@
+# =============================================================
+# Cloudflare Tunnel Configuration
+# File: ./cloudflared/config.yml
+#
+# HOW TO USE:
+#   1. Replace PASTE-YOUR-TUNNEL-UUID-HERE with the UUID from:
+#      cloudflared tunnel create my-lab
+#      (it looks like: a1b2c3d4-e5f6-7890-abcd-ef1234567890)
+#
+#   2. Replace lab.yourdomain.com with your actual domain/subdomain
+#      e.g. ctf.mysite.com  OR  llmlab.mysite.com
+#
+#   3. Make sure credentials.json is in this folder (copied from
+#      ~/.cloudflared/<TUNNEL-UUID>.json after tunnel login)
+# =============================================================
+
+tunnel: PASTE-YOUR-TUNNEL-UUID-HERE
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  # Route all traffic for your domain to nginx on port 8080
+  - hostname: lab.yourdomain.com
+    service: http://nginx:80
+    originRequest:
+      # LLM inference is slow — keep connection alive longer
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # Catch-all rule (required by cloudflared — returns 404 for other hosts)
+  - service: http_status:404

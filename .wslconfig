@@ -1,0 +1,5 @@
+[wsl2]
+memory=4GB            # Limits WSL to half your physical RAM
+processors=4          # Uses 4 cores (perfect for 8-core CPUs)
+swap=2GB              # Small swap just in case
+localhostForwarding=true
