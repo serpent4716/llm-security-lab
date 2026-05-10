@@ -1,67 +1,50 @@
 pipeline {
     agent any
-
     stages {
-
         stage('Checkout') {
             steps {
-                echo "📥 Pulling latest code from GitHub..."
+                echo "📥 Pulling latest code..."
                 checkout scm
             }
         }
-
         stage('Test') {
             steps {
-                echo "🧪 Running backend tests..."
                 dir('backend') {
                     sh '''
-                        pip3 install -q -r requirements.txt
+                        pip3 install -q -r requirements.txt --break-system-packages
                         python3 -m py_compile eval_service.py
-                        echo "✅ All tests passed"
+                        echo "✅ Tests passed"
                     '''
                 }
             }
         }
-
         stage('Build') {
             steps {
-                echo "🐳 Building Docker images..."
                 sh '''
-                    docker compose build backend frontend
+                    docker-compose build backend frontend
                     echo "✅ Images built"
                 '''
             }
         }
-
         stage('Deploy') {
             steps {
-                echo "🚀 Deploying application..."
                 sh '''
-                    docker compose up -d
-                    echo "✅ App is live"
+                    docker-compose up -d
+                    echo "✅ App deployed"
                 '''
             }
         }
-
         stage('Health Check') {
             steps {
-                echo "🏥 Verifying deployment..."
                 sh '''
                     sleep 15
-                    curl -sf http://localhost:8000/health \
-                        && echo "✅ Backend healthy" \
-                        || echo "⚠️ Backend still starting"
+                    curl -sf http://localhost:8000/health && echo "✅ Healthy!" || echo "⚠️ Still starting"
                 '''
             }
         }
     }
-
     post {
-        success {
-            echo "🎉 Pipeline complete!"
-        }
-        failure {
-            echo "💥 Pipeline failed. Check logs."
-        }
+        success { echo "🎉 Build #${BUILD_NUMBER} deployed!" }
+        failure { echo "💥 Build failed. Check logs." }
     }
 }
