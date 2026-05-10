@@ -293,7 +293,7 @@ async def call_ollama(system_prompt: str, user_message: str) -> tuple[str, int]:
 # ─────────────────────────────────────────────────────────────
 class AttemptRequest(BaseModel):
     session_id: str = Field(..., min_length=8, max_length=64)
-    level:      int = Field(..., ge=1, le=3)
+    level:      int = Field(..., ge=1, le=9)
     prompt:     str = Field(..., min_length=1, max_length=2000)
 
     @field_validator("prompt")
