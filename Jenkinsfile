@@ -21,7 +21,6 @@ pipeline {
         stage('Build') {
             steps {
                 sh '''
-                    cd /home/ubuntu/llm-security-lab
                     docker-compose build backend frontend
                     echo "✅ Images built"
                 '''
@@ -30,7 +29,6 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh '''
-                    cd /home/ubuntu/llm-security-lab
                     docker-compose up -d --no-recreate
                     echo "✅ App deployed"
                 '''
